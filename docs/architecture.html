@@ -165,11 +165,11 @@ html { scroll-behavior: smooth; }
     <span class="pill built">Frontend + mock API built</span>
     <span class="pill planned">Backend planned</span>
     <span class="pill info">Synthetic data only</span>
-    <span class="pill">Java 21 · Spring Boot 3.5 · PostgreSQL 16 + pgvector</span>
+    <span class="pill">Java 21 · Spring Boot 4.1 · PostgreSQL 16 + pgvector</span>
   </div>
   <div class="status-strip" aria-label="Delivery phases">
-    <div class="phase done"><div class="n">Phase 1</div><div class="t">React app on mock API</div><span class="pill built">Awaiting review</span></div>
-    <div class="phase"><div class="n">Phase 2</div><div class="t">Foundation, identity, corpus, ingestion</div><span class="pill planned">Planned</span></div>
+    <div class="phase done"><div class="n">Phase 1</div><div class="t">React app on mock API</div><span class="pill built">Built</span></div>
+    <div class="phase done"><div class="n">Phase 2</div><div class="t">Foundation, identity, corpus, ingestion</div><span class="pill built">Built</span></div>
     <div class="phase"><div class="n">Phase 3</div><div class="t">Hybrid retrieval, grounded answers</div><span class="pill planned">Planned</span></div>
     <div class="phase"><div class="n">Phase 4</div><div class="t">Requests, approvals, execution, audit</div><span class="pill planned">Planned</span></div>
     <div class="phase"><div class="n">Phase 5</div><div class="t">Agents, observability, eval, Docker</div><span class="pill planned">Planned</span></div>
@@ -188,11 +188,11 @@ html { scroll-behavior: smooth; }
   <div class="table-wrap"><table>
     <thead><tr><th>Layer</th><th>Choice</th><th>Notes</th></tr></thead>
     <tbody>
-      <tr><td>Runtime</td><td>Java 21, Spring Boot 3.5.x, Spring MVC</td><td>Modular monolith with module boundaries checked by an <code>ApplicationModules.verify()</code> test</td></tr>
-      <tr><td>Persistence</td><td>Spring Data JPA, Hibernate 6.6, <code>hibernate-vector</code>, Hibernate Envers, Flyway</td><td>Flyway owns the schema; Hibernate runs in <code>ddl-auto=validate</code></td></tr>
+      <tr><td>Runtime</td><td>Java 21, Spring Boot 4.1, Spring MVC</td><td>Modular monolith: one top-level package per module</td></tr>
+      <tr><td>Persistence</td><td>Spring Data JPA, Hibernate 7.4, <code>hibernate-vector</code>, Hibernate Envers, Flyway</td><td>Flyway owns the schema; Hibernate runs in <code>ddl-auto=validate</code></td></tr>
       <tr><td>Database</td><td>PostgreSQL 16 + pgvector</td><td>Relational data, the vector index (HNSW) and the keyword index (GIN on tsvector) in one store</td></tr>
       <tr><td>Security</td><td>Spring Security, OAuth2 resource server, JWT HS256, BCrypt</td><td>Stateless bearer tokens with a 60-minute TTL</td></tr>
-      <tr><td>AI</td><td>Spring AI 1.1.x</td><td>Embeddings: local ONNX all-MiniLM-L6-v2 (384 dims). Chat model: <code>stub</code> (default) | <code>openai</code> | <code>anthropic</code> | <code>ollama</code></td></tr>
+      <tr><td>AI</td><td>Spring AI 2.0</td><td>Embeddings: local ONNX all-MiniLM-L6-v2 (384 dims). Chat model: <code>stub</code> (default) | <code>openai</code> | <code>anthropic</code> | <code>ollama</code></td></tr>
       <tr><td>Ops</td><td>Actuator, ECS structured logs, springdoc OpenAPI, Docker Compose</td><td>Liveness/readiness probes and a correlation ID on every request</td></tr>
       <tr><td>Frontend</td><td>React 19, Vite 8, TypeScript 7, React Router 7, TanStack Query 5, React Hook Form + Zod 4, Tailwind 4, MSW 2</td><td>Built first against a mock API that follows the same contract</td></tr>
       <tr><td>Tests</td><td>JUnit 5, Mockito</td><td>Unit tests of business logic only, by user decision</td></tr>
@@ -864,7 +864,7 @@ group by 1, 2, 3 order by 1 desc;</code></pre>
 <section id="decisions">
   <h2>Decisions</h2>
   <p class="section-intro">Each decision records the choice, the alternatives considered and the reason.</p>
-  <div class="adr"><div class="id">ADR-01</div><div><h4>Modular monolith</h4><p><span class="label">Chosen</span>One Spring Boot app with package-level modules, verified by a Modulith test.</p><p><span class="label">Over</span>Microservices.</p><p><span class="label">Because</span>The brief names it as the baseline, there's one database, and transactional approval-plus-execution is simpler in one process.</p></div></div>
+  <div class="adr"><div class="id">ADR-01</div><div><h4>Modular monolith</h4><p><span class="label">Chosen</span>One Spring Boot app with one top-level package per module.</p><p><span class="label">Over</span>Microservices.</p><p><span class="label">Because</span>The brief names it as the baseline, there's one database, and transactional approval-plus-execution is simpler in one process.</p></div></div>
   <div class="adr"><div class="id">ADR-02</div><div><h4>Flyway owns the schema, Hibernate validates</h4><p><span class="label">Chosen</span>SQL migrations plus <code>ddl-auto=validate</code>.</p><p><span class="label">Over</span>Hibernate auto-DDL.</p><p><span class="label">Because</span>Generated columns, HNSW/GIN indexes, partial unique indexes and triggers need hand-written SQL, and validation catches mapping drift.</p></div></div>
   <div class="adr"><div class="id">ADR-03</div><div><h4>pgvector inside PostgreSQL</h4><p><span class="label">Chosen</span>Vectors and keyword indexes in the same table as the chunk metadata.</p><p><span class="label">Over</span>A separate vector store, or Spring AI's <code>PgVectorStore</code> table.</p><p><span class="label">Because</span>One transaction per ingestion, joins to document status, and both searches in typed HQL.</p></div></div>
   <div class="adr"><div class="id">ADR-04</div><div><h4>Reciprocal Rank Fusion for hybrid ranking</h4><p><span class="label">Chosen</span>RRF, k = 60, equal weights.</p><p><span class="label">Over</span>Weighted score blending.</p><p><span class="label">Because</span>Cosine similarity and <code>ts_rank_cd</code> sit on different scales; RRF needs no calibration and is easy to explain and test.</p></div></div>

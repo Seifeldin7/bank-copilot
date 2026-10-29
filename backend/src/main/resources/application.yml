@@ -1,0 +1,61 @@
+spring:
+  application:
+    name: banking-copilot
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/copilot}
+    username: ${DB_USER:copilot}
+    password: ${DB_PASSWORD:copilot}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  threads:
+    virtual:
+      enabled: true
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 11MB
+  ai:
+    embedding:
+      transformer:
+        cache:
+          directory: ${MODEL_CACHE_DIR:${user.home}/.cache/banking-copilot/models}
+
+logging:
+  structured:
+    format:
+      console: ${LOG_FORMAT:ecs}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,db,corpus
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+copilot:
+  security:
+    jwt-secret: ${JWT_SECRET:local-development-secret-change-me-0123456789}
+    token-ttl: 60m
+    allowed-origins: ${ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}
+  demo:
+    seed-users: ${SEED_DEMO_USERS:true}
+  corpus:
+    dir: ${CORPUS_DIR:../corpus}
+    bootstrap-enabled: ${CORPUS_BOOTSTRAP:true}
+  uploads:
+    dir: ${UPLOADS_DIR:./data/uploads}
+  ingestion:
+    chunk-size: 800
+    chunk-overlap: 120

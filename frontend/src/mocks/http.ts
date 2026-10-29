@@ -28,8 +28,40 @@ export function issueToken(user: MockUser) {
   return { token: `mock.${btoa(user.id)}.${expiresAt}`, expiresAt: new Date(expiresAt).toISOString() }
 }
 
+function userFromBackendJwt(token: string): MockUser {
+  let claims: { sub?: string; exp?: number; roles?: string[] }
+  try {
+    claims = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+  } catch {
+    throw new MockHttpError(401, 'Unauthorized', 'The access token is invalid.')
+  }
+  if (!claims.sub || !claims.exp || claims.exp * 1000 < Date.now()) {
+    throw new MockHttpError(401, 'Unauthorized', 'The access token has expired.')
+  }
+  const existing = db.users.find((u) => u.username === claims.sub)
+  if (existing) return existing
+  const user: MockUser = {
+    id: `u-${claims.sub}`,
+    username: claims.sub,
+    fullName: claims.sub,
+    role: claims.roles?.includes('SUPERVISOR') ? 'SUPERVISOR' : 'EMPLOYEE',
+    branchCode: 'CAI-012',
+    enabled: true,
+    createdAt: new Date().toISOString(),
+    password: '',
+  }
+  db.users.push(user)
+  return user
+}
+
 export function authenticate(request: Request, role?: Role): MockUser {
   const header = request.headers.get('Authorization') ?? ''
+  const jwt = /^Bearer ([\w-]+\.[\w-]+\.[\w-]+)$/.exec(header)
+  if (jwt) {
+    const user = userFromBackendJwt(jwt[1])
+    if (role === 'SUPERVISOR' && user.role !== 'SUPERVISOR') throw forbidden('This action requires the SUPERVISOR role.')
+    return user
+  }
   const match = /^Bearer mock\.([A-Za-z0-9+/=]+)\.(\d+)$/.exec(header)
   if (!match) throw new MockHttpError(401, 'Unauthorized', 'Authentication is required.')
   if (Number(match[2]) < Date.now()) throw new MockHttpError(401, 'Unauthorized', 'The access token has expired.')

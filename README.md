@@ -8,15 +8,62 @@ All documents, customers and accounts are synthetic. Nothing connects to real ba
 
 | Phase | Scope | State |
 |---|---|---|
-| 1 | Complete React app on a mock API | Done, awaiting review |
-| 2 | Backend foundation, identity, corpus, ingestion | Not started |
+| 1 | Complete React app on a mock API | Done |
+| 2 | Backend foundation, identity, corpus, ingestion | Done |
 | 3 | Hybrid retrieval, grounded answers, refusals | Not started |
 | 4 | Service requests, approvals, execution, audit | Not started |
 | 5 | Multi-agent orchestration, observability, evaluation, Docker | Not started |
 
+## Backend
+
+Java 21, Spring Boot 4.1, Spring Data JPA with Hibernate 7 (including `hibernate-vector`), PostgreSQL 16 with pgvector, Flyway, Spring Security (JWT), Spring AI 2.0 (local ONNX embeddings) and PDFBox.
+
+### Run locally
+
+```bash
+docker run -d --name bm-pg -p 5433:5432 \
+  -e POSTGRES_DB=copilot -e POSTGRES_USER=copilot -e POSTGRES_PASSWORD=copilot \
+  pgvector/pgvector:pg16
+
+cd backend
+./mvnw spring-boot:run
+```
+
+- The API runs on http://localhost:8080, and Swagger UI is at http://localhost:8080/swagger-ui.html.
+- Port 5433 avoids clashing with a PostgreSQL that may already run on 5432.
+- The first start downloads the embedding model (about 90 MB) into `~/.cache/banking-copilot/models`.
+- On every start the app syncs `corpus/`. Unchanged files are skipped, and `/actuator/health/readiness` reports UP once the sync finishes.
+- Demo users are created on first start (see below). Set `SEED_DEMO_USERS=false` to turn this off.
+- Logs are structured JSON (ECS) on stdout.
+
+| Variable | Default |
+|---|---|
+| `DB_URL` / `DB_USER` / `DB_PASSWORD` | `jdbc:postgresql://localhost:5433/copilot` / `copilot` / `copilot` |
+| `JWT_SECRET` | development value; set your own (at least 32 bytes) outside local use |
+| `CORPUS_DIR` | `../corpus` |
+| `UPLOADS_DIR` | `./data/uploads` |
+| `MODEL_CACHE_DIR` | `~/.cache/banking-copilot/models` |
+
+### Tests
+
+```bash
+cd backend
+./mvnw test
+```
+
+Unit tests cover business logic only: text cleaning, chunking, injection screening, upload validation, the ingestion pipeline (new, duplicate, new version) and user provisioning.
+
+### Corpus
+
+`corpus/` holds 18 synthetic documents (about 70 pages): 10 Markdown files in `corpus/markdown` and 8 PDFs in `corpus/pdf`.
+- The PDFs are generated from `corpus/pdf-sources` with `tools/generate-corpus-pdfs.sh`.
+- `corpus/pdf/versions/v1` holds the superseded version of the approval policy. It's ingested first, so the current version replaces it.
+- `branch-notice-q3-digital.md` deliberately contains prompt-injection text, which ingestion flags.
+- `corpus/catalog.csv` sets each file's title and category.
+
 ## Frontend
 
-React 19 + TypeScript (Vite), React Router, TanStack Query, React Hook Form + Zod, and Tailwind CSS. In mock mode, Mock Service Worker serves the full API contract in the browser, with the same business rules the backend will enforce. Data persists in `localStorage`, and **Reset** in the sidebar restores the seed data.
+React 19 + TypeScript (Vite), React Router, TanStack Query, React Hook Form + Zod, and Tailwind CSS.
 
 ```bash
 cd frontend
@@ -24,7 +71,10 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173. `VITE_USE_MOCKS=true` (set in `.env.development`) turns the mock API on. Set it to `false` to proxy `/api` to `http://localhost:8080`.
+Open http://localhost:5173.
+- `VITE_USE_MOCKS=true` turns on the in-browser mock API (Mock Service Worker).
+- `VITE_REAL_API_GROUPS` lists the parts served by the real backend instead, proxied to http://localhost:8080. In development it's `identity,documents`, so sign-in, users and documents use Spring, while the copilot, requests and audit stay mocked until their phases are built.
+- Mock data persists in `localStorage`; **Reset** in the sidebar restores the seed data.
 
 ```bash
 npm run build
@@ -41,14 +91,9 @@ docker build -t bm-copilot-frontend frontend && docker run -p 3000:80 bm-copilot
 | supervisor1 | Supervisor@123 | Supervisor |
 | supervisor2 | Supervisor@123 | Supervisor |
 
-### Walkthrough
+There is no public sign-up. Supervisors provision employee accounts, and roles can't be changed through the application.
 
-1. Sign in as **employee1** and ask an example question. You get a cited answer; open **Agent trace** to see the agent steps, tokens and cost.
-2. Try the out-of-scope, ambiguous, prompt-injection and agent-failure examples. Each one is refused or falls back.
-3. On a grounded answer, choose **Create draft request**, complete the highlighted fields, and submit.
-4. Open `/approvals`. The 403 page appears, and the API rejects the call too.
-5. Sign in as **supervisor1** and open the approval queue. Reject one request (a reason is required) and **Edit & approve** another (a before/after diff is shown). The request executes once; **Retry execution** returns the original record.
-6. Under **Documents**, upload `docs/demo-files/branch-atm-guidelines.md`, then upload it again to see duplicate detection. Ask about ATM withdrawal limits.
-7. Open **Audit & usage** for run traces, AI usage and the activity log.
+## Documentation
 
-The API contract lives in [docs/api-contract.md](docs/api-contract.md).
+- [API contract](docs/api-contract.md)
+- [Architecture](docs/architecture.html): open locally; keep `docs/assets` next to it
