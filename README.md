@@ -10,7 +10,7 @@ All documents, customers and accounts are synthetic. Nothing connects to real ba
 |---|---|---|
 | 1 | Complete React app on a mock API | Done |
 | 2 | Backend foundation, identity, corpus, ingestion | Done |
-| 3 | Hybrid retrieval, grounded answers, refusals | Not started |
+| 3 | Hybrid retrieval, grounded answers, refusals | Done |
 | 4 | Service requests, approvals, execution, audit | Not started |
 | 5 | Multi-agent orchestration, observability, evaluation, Docker | Not started |
 
@@ -43,6 +43,20 @@ cd backend
 | `CORPUS_DIR` | `../corpus` |
 | `UPLOADS_DIR` | `./data/uploads` |
 | `MODEL_CACHE_DIR` | `~/.cache/banking-copilot/models` |
+| `LLM_PROVIDER` | `stub`; or `openai` / `anthropic` |
+| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | empty; needed only for that provider |
+| `LLM_INPUT_USD_PER_MILLION` / `LLM_OUTPUT_USD_PER_MILLION` | `0`; used for the cost estimate |
+
+### Copilot
+
+`POST /api/copilot/ask` runs these steps:
+
+1. A pre-check refuses questions that try to instruct the copilot, or that have fewer than two meaningful words.
+2. Hybrid search runs semantic search (pgvector) and keyword search (PostgreSQL full text) and fuses them with Reciprocal Rank Fusion. Superseded, retired and flagged passages are never returned.
+3. The pre-check refuses if no passage reaches cosine similarity 0.35, so the model isn't called.
+4. The model answers from the top 5 passages and returns JSON. The citation guard withholds any answer that cites nothing, or cites a passage that wasn't retrieved.
+
+The default `stub` model needs no key. It quotes the best-matching sentences and cites them, so its answers are extractive rather than written prose. Set `LLM_PROVIDER=openai` with `OPENAI_API_KEY` (or `SPRING_AI_OPENAI_BASE_URL` for an OpenAI-compatible server such as Ollama), or `LLM_PROVIDER=anthropic` with `ANTHROPIC_API_KEY`, for a real model. Supervisors can inspect retrieval ranks with `GET /api/search?q=`.
 
 ### Tests
 
@@ -51,7 +65,7 @@ cd backend
 ./mvnw test
 ```
 
-Unit tests cover business logic only: text cleaning, chunking, injection screening, upload validation, the ingestion pipeline (new, duplicate, new version) and user provisioning.
+Unit tests cover business logic only: text cleaning, chunking, injection screening, upload validation, the ingestion pipeline (new, duplicate, new version), user provisioning, rank fusion, the pre-check, the citation guard, grounded answering (valid, invented citation, malformed reply), the stub model and the copilot flow (refusals skip the model, a model failure becomes a refusal).
 
 ### Corpus
 
@@ -73,7 +87,7 @@ npm run dev
 
 Open http://localhost:5173.
 - `VITE_USE_MOCKS=true` turns on the in-browser mock API (Mock Service Worker).
-- `VITE_REAL_API_GROUPS` lists the parts served by the real backend instead, proxied to http://localhost:8080. In development it's `identity,documents`, so sign-in, users and documents use Spring, while the copilot, requests and audit stay mocked until their phases are built.
+- `VITE_REAL_API_GROUPS` lists the parts served by the real backend instead, proxied to http://localhost:8080. In development it's `identity,documents,copilot`, so sign-in, users, documents and the copilot use Spring, while requests and audit stay mocked until their phases are built. Until Phase 5 the copilot answer has no confidence verdict and no "prepare a draft" button, and copilot runs don't appear on the mocked audit page.
 - Mock data persists in `localStorage`; **Reset** in the sidebar restores the seed data.
 
 ```bash

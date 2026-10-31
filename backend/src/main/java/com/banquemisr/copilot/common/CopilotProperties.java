@@ -10,7 +10,9 @@ public record CopilotProperties(
         Demo demo,
         Corpus corpus,
         Uploads uploads,
-        Ingestion ingestion) {
+        Ingestion ingestion,
+        Retrieval retrieval,
+        Llm llm) {
 
     public record Security(String jwtSecret, Duration tokenTtl, List<String> allowedOrigins) {
     }
@@ -25,5 +27,11 @@ public record CopilotProperties(
     }
 
     public record Ingestion(int chunkSize, int chunkOverlap) {
+    }
+
+    public record Retrieval(int candidates, int evidence, int rrfK, double minSimilarity) {
+    }
+
+    public record Llm(double inputUsdPerMillionTokens, double outputUsdPerMillionTokens) {
     }
 }

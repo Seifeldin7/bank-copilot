@@ -35,6 +35,9 @@ There is no public sign-up and no endpoint that changes a role.
 |---|---|---|---|
 | POST | `/copilot/ask` | any | `AskRequest` → `AskResponse` (answer or refusal, citations, verdict, agent steps, usage) |
 | POST | `/copilot/prepare-request` | any | `{ runId }` → `PreparedDraftResponse`. Creates a **DRAFT** owned by the caller. `409` if the run was refused or a draft already exists, `422` if no category applies |
+| GET | `/search?q&limit` | SUPERVISOR | `Evidence[]` (at most 20): each hit's semantic rank, keyword rank, fused RRF score and cosine similarity. For inspecting retrieval |
+
+Until Phase 5, `AskResponse` has two steps (`KNOWLEDGE_RETRIEVAL`, `ANSWER_GENERATION`), `verdict` and `suggestedCategory` are `null`, and `prepare-request` is not implemented.
 
 ## Documents
 

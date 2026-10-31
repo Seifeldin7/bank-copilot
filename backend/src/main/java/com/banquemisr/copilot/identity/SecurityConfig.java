@@ -50,7 +50,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         .requestMatchers("/actuator/health/**", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-                        .requestMatchers("/api/approvals/**", "/api/audit/**", "/api/users/**").hasRole("SUPERVISOR")
+                        .requestMatchers("/api/approvals/**", "/api/audit/**", "/api/users/**", "/api/search").hasRole("SUPERVISOR")
                         .requestMatchers(HttpMethod.POST, "/api/documents").hasRole("SUPERVISOR")
                         .requestMatchers(HttpMethod.DELETE, "/api/documents/**").hasRole("SUPERVISOR")
                         .requestMatchers(HttpMethod.GET, "/api/documents/*/ingestion-log").hasRole("SUPERVISOR")
