@@ -12,7 +12,8 @@ public record CopilotProperties(
         Uploads uploads,
         Ingestion ingestion,
         Retrieval retrieval,
-        Llm llm) {
+        Llm llm,
+        Requests requests) {
 
     public record Security(String jwtSecret, Duration tokenTtl, List<String> allowedOrigins) {
     }
@@ -33,5 +34,8 @@ public record CopilotProperties(
     }
 
     public record Llm(double inputUsdPerMillionTokens, double outputUsdPerMillionTokens) {
+    }
+
+    public record Requests(int statementMaxMonths, int documentsDueMaxDays) {
     }
 }

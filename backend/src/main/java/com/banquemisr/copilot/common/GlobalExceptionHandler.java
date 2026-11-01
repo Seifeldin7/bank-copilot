@@ -7,10 +7,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
@@ -35,6 +37,18 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({HttpMessageNotReadableException.class, MissingServletRequestPartException.class})
     ProblemDetail handleUnreadable(Exception ex, HttpServletRequest request) {
         return Problems.of(HttpStatus.BAD_REQUEST, "The request body is missing or malformed.", request.getRequestURI(), List.of());
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    ProblemDetail handleTypeMismatch(MethodArgumentTypeMismatchException ex, HttpServletRequest request) {
+        return Problems.of(HttpStatus.BAD_REQUEST, "Invalid value for " + ex.getName() + ".", request.getRequestURI(),
+                List.of(new FieldError(ex.getName(), "This value is not allowed.")));
+    }
+
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    ProblemDetail handleOptimisticLock(ObjectOptimisticLockingFailureException ex, HttpServletRequest request) {
+        return Problems.of(HttpStatus.CONFLICT, "This request was changed by someone else. Reload it and try again.",
+                request.getRequestURI(), List.of());
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)

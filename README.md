@@ -11,7 +11,7 @@ All documents, customers and accounts are synthetic. Nothing connects to real ba
 | 1 | Complete React app on a mock API | Done |
 | 2 | Backend foundation, identity, corpus, ingestion | Done |
 | 3 | Hybrid retrieval, grounded answers, refusals | Done |
-| 4 | Service requests, approvals, execution, audit | Not started |
+| 4 | Service requests, approvals, execution, audit | Done |
 | 5 | Multi-agent orchestration, observability, evaluation, Docker | Not started |
 
 ## Backend
@@ -58,6 +58,16 @@ cd backend
 
 The default `stub` model needs no key. It quotes the best-matching sentences and cites them, so its answers are extractive rather than written prose. Set `LLM_PROVIDER=openai` with `OPENAI_API_KEY` (or `SPRING_AI_OPENAI_BASE_URL` for an OpenAI-compatible server such as Ollama), or `LLM_PROVIDER=anthropic` with `ANTHROPIC_API_KEY`, for a real model. Supervisors can inspect retrieval ranks with `GET /api/search?q=`.
 
+### Service requests and approvals
+
+- **Drafts:** employees create drafts in one of four categories (card, digital banking, account, additional documentation). Drafts may be incomplete. Each save stores a validation result with ERROR and WARNING issues from `CategoryValidator`; its limits are in `copilot.requests.*`.
+- **Submit:** only the owner can edit or submit, and only while the request is a draft. Submitting with any ERROR returns `422` with field errors.
+- **Lifecycle:** `DRAFT → PENDING_APPROVAL → APPROVED → EXECUTED`, or `PENDING_APPROVAL → REJECTED`. Any other move returns `409`.
+- **Decisions:** supervisors approve, reject (with a reason) or edit and approve (with a reason; the field diff is stored). A supervisor can never decide their own request; this is checked in the service and by a database constraint.
+- **Execution:** approval runs the simulated execution once, under a row lock, with a unique key on `execution_record.request_id`. Calling `POST /api/approvals/{id}/execute` again returns the original record and logs `EXECUTION_RETRY`.
+- **History:** every change writes a `request_history` row and an `audit_event`, both tagged with the request's run ID.
+- **Concurrency:** every change sends the `version` the client last saw; a stale version returns `409`.
+
 ### Tests
 
 ```bash
@@ -65,7 +75,7 @@ cd backend
 ./mvnw test
 ```
 
-Unit tests cover business logic only: text cleaning, chunking, injection screening, upload validation, the ingestion pipeline (new, duplicate, new version), user provisioning, rank fusion, the pre-check, the citation guard, grounded answering (valid, invented citation, malformed reply), the stub model and the copilot flow (refusals skip the model, a model failure becomes a refusal).
+Unit tests cover business logic only: text cleaning, chunking, injection screening, upload validation, the ingestion pipeline (new, duplicate, new version), user provisioning, rank fusion, the pre-check, the citation guard, grounded answering (valid, invented citation, malformed reply), the stub model, the copilot flow (refusals skip the model, a model failure becomes a refusal), every status transition, the category rules, request access (404 for other employees, no self-approval), field diffs, drafting and submitting, approval decisions, and execution idempotency.
 
 ### Corpus
 
@@ -87,7 +97,7 @@ npm run dev
 
 Open http://localhost:5173.
 - `VITE_USE_MOCKS=true` turns on the in-browser mock API (Mock Service Worker).
-- `VITE_REAL_API_GROUPS` lists the parts served by the real backend instead, proxied to http://localhost:8080. In development it's `identity,documents,copilot`, so sign-in, users, documents and the copilot use Spring, while requests and audit stay mocked until their phases are built. Until Phase 5 the copilot answer has no confidence verdict and no "prepare a draft" button, and copilot runs don't appear on the mocked audit page.
+- `VITE_REAL_API_GROUPS` lists the parts served by the real backend instead, proxied to http://localhost:8080. In development it's `identity,documents,copilot,workflow`, so everything except the audit pages uses Spring. Until Phase 5 the copilot answer has no confidence verdict and no "prepare a draft" button, and the audit pages still show mock data.
 - Mock data persists in `localStorage`; **Reset** in the sidebar restores the seed data.
 
 ```bash

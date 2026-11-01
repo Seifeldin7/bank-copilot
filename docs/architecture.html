@@ -171,7 +171,7 @@ html { scroll-behavior: smooth; }
     <div class="phase done"><div class="n">Phase 1</div><div class="t">React app on mock API</div><span class="pill built">Built</span></div>
     <div class="phase done"><div class="n">Phase 2</div><div class="t">Foundation, identity, corpus, ingestion</div><span class="pill built">Built</span></div>
     <div class="phase done"><div class="n">Phase 3</div><div class="t">Hybrid retrieval, grounded answers</div><span class="pill built">Built</span></div>
-    <div class="phase"><div class="n">Phase 4</div><div class="t">Requests, approvals, execution, audit</div><span class="pill planned">Planned</span></div>
+    <div class="phase done"><div class="n">Phase 4</div><div class="t">Requests, approvals, execution, audit</div><span class="pill built">Built</span></div>
     <div class="phase"><div class="n">Phase 5</div><div class="t">Agents, observability, eval, Docker</div><span class="pill planned">Planned</span></div>
   </div>
 </header>
@@ -189,7 +189,7 @@ html { scroll-behavior: smooth; }
     <thead><tr><th>Layer</th><th>Choice</th><th>Notes</th></tr></thead>
     <tbody>
       <tr><td>Runtime</td><td>Java 21, Spring Boot 4.1, Spring MVC</td><td>Modular monolith: one top-level package per module</td></tr>
-      <tr><td>Persistence</td><td>Spring Data JPA, Hibernate 7.4, <code>hibernate-vector</code>, Hibernate Envers, Flyway</td><td>Flyway owns the schema; Hibernate runs in <code>ddl-auto=validate</code></td></tr>
+      <tr><td>Persistence</td><td>Spring Data JPA, Hibernate 7.4, <code>hibernate-vector</code>, Flyway</td><td>Flyway owns the schema; Hibernate runs in <code>ddl-auto=validate</code></td></tr>
       <tr><td>Database</td><td>PostgreSQL 16 + pgvector</td><td>Relational data, the vector index (HNSW) and the keyword index (GIN on tsvector) in one store</td></tr>
       <tr><td>Security</td><td>Spring Security, OAuth2 resource server, JWT HS256, BCrypt</td><td>Stateless bearer tokens with a 60-minute TTL</td></tr>
       <tr><td>AI</td><td>Spring AI 2.0</td><td>Embeddings: local ONNX all-MiniLM-L6-v2 (384 dims). Chat model: <code>stub</code> (default) | <code>openai</code> | <code>anthropic</code> | <code>ollama</code></td></tr>
@@ -274,9 +274,9 @@ flowchart LR
       <tr><td class="mono">knowledge</td><td class="mono">document, document_chunk, ingestion_stage_log</td><td><code>IngestionPipeline</code>, <code>PdfExtractor</code>, <code>MarkdownExtractor</code>, <code>TextCleaner</code>, <code>Chunker</code>, <code>InjectionDetector</code>, <code>EmbeddingStage</code>, <code>IndexWriter</code>, <code>CorpusBootstrapper</code>, <code>UploadValidator</code></td><td><code>DocumentCatalog</code></td></tr>
       <tr><td class="mono">retrieval</td><td>none (reads chunks)</td><td><code>HybridSearch</code>, <code>RankFusion</code>, <code>QueryTerms</code>, <code>SearchController</code></td><td><code>HybridSearch.search(question)</code></td></tr>
       <tr><td class="mono">assistant</td><td class="mono">copilot_run, agent_step</td><td><code>CopilotService</code>, <code>PreCheck</code>, <code>GroundedAnswerService</code>, <code>CitationGuard</code>, <code>ModelGateway</code>, <code>StubChatModel</code>; Phase 5 adds <code>CopilotOrchestrator</code>, three agents and the fallback</td><td><code>CopilotService.ask()</code></td></tr>
-      <tr><td class="mono">servicerequest</td><td class="mono">service_request, service_request_aud, request_history</td><td><code>ServiceRequestService</code>, <code>RequestStateMachine</code>, <code>CategoryValidator</code> strategies, <code>RequestAccessPolicy</code>, <code>RequestDiff</code></td><td><code>ServiceRequestService.createDraft()</code></td></tr>
-      <tr><td class="mono">approval</td><td class="mono">approval_decision, execution_record</td><td><code>ApprovalService</code>, <code>SimulatedExecutionService</code>, <code>SimulatedActions</code></td><td>none</td></tr>
-      <tr><td class="mono">audit</td><td class="mono">audit_event, ai_usage, revinfo</td><td><code>CorrelationIdFilter</code>, <code>AuditRecorder</code>, <code>UsageRecordingAdvisor</code>, <code>UsageCostCalculator</code>, <code>ActorRevisionListener</code></td><td><code>AuditRecorder</code>, <code>RunContext</code></td></tr>
+      <tr><td class="mono">servicerequest</td><td class="mono">service_request, request_history, execution_record</td><td><code>ServiceRequestService</code>, <code>RequestStatus</code> (transition table), <code>CategoryValidator</code>, <code>RequestAccessPolicy</code>, <code>RequestDiff</code>, <code>RequestHistoryRecorder</code></td><td><code>ServiceRequestService.create()</code></td></tr>
+      <tr><td class="mono">approval</td><td>none (decides on service_request)</td><td><code>ApprovalService</code>, <code>SimulatedExecutionService</code>, <code>SimulatedActions</code></td><td>none</td></tr>
+      <tr><td class="mono">audit</td><td class="mono">audit_event, ai_usage</td><td><code>CorrelationIdFilter</code>, <code>AuditService</code>, <code>UsageRecordingAdvisor</code>, <code>UsageCostCalculator</code></td><td><code>AuditService</code>, <code>RunContext</code></td></tr>
       <tr><td class="mono">common</td><td>none</td><td><code>ProblemDetailsAdvice</code>, <code>MdcTaskDecorator</code>, <code>Clock</code> bean</td><td>shared exceptions</td></tr>
     </tbody>
   </table></div>
@@ -343,20 +343,21 @@ sequenceDiagram
   participant X as SimulatedExecutionService
   participant DB as PostgreSQL
   E->>R: POST /requests/{id}/submit {version}
-  R->>P: assertOwner(user, request)
-  R->>V: validate(payload)
+  R->>DB: SELECT … FOR UPDATE (PESSIMISTIC_WRITE)
+  R->>P: requireOwner(user, request)
+  R->>V: validate(title, description, payload)
   alt has ERROR issues
     R-->>E: 422 + field errors (stays DRAFT)
   else valid
     R->>DB: status=PENDING_APPROVAL, history, audit
   end
   S->>AP: POST /approvals/{id}/edit-approve {payload, reason, version}
-  AP->>P: assertCanDecide(supervisor, request)
+  AP->>DB: SELECT … FOR UPDATE (PESSIMISTIC_WRITE)
+  AP->>P: requireCanDecide(supervisor, request)
   Note right of P: role = SUPERVISOR and supervisor ≠ requester
   AP->>V: re-validate edited payload
-  AP->>DB: decision + field diff + Envers revision
-  AP->>X: execute(requestId)
-  X->>DB: SELECT … FOR UPDATE (PESSIMISTIC_WRITE)
+  AP->>DB: decision + field diff on the request, history EDITED_AND_APPROVED
+  AP->>X: execute(lockedRequest), same transaction
   alt already EXECUTED
     X-->>S: existing ExecutionRecord (alreadyExecuted=true)
   else APPROVED
@@ -385,7 +386,7 @@ flowchart TB
 
 <section id="lifecycle">
   <h2>Request lifecycle</h2>
-  <p class="section-intro"><code>RequestStateMachine</code> holds the only transition table. Any other move returns <code>409 Conflict</code>.</p>
+  <p class="section-intro"><code>RequestStatus.canMoveTo()</code> holds the only transition table, and <code>ServiceRequest.moveTo()</code> is the only way to change status. Any other move returns <code>409 Conflict</code>.</p>
   <div class="diagram"><pre class="mermaid">
 stateDiagram-v2
   [*] --> DRAFT: create (employee or RequestPreparationAgent)
@@ -402,11 +403,11 @@ stateDiagram-v2
     <thead><tr><th>Transition</th><th>Who</th><th>Guards</th><th>Side effects</th></tr></thead>
     <tbody>
       <tr><td class="mono">∅ → DRAFT</td><td>Any user; agent on behalf of caller</td><td>Category matches payload type</td><td>history CREATED, validation snapshot, audit event</td></tr>
-      <tr><td class="mono">DRAFT → DRAFT</td><td>Owner</td><td><code>version</code> matches</td><td>history UPDATED with field diff, Envers revision</td></tr>
+      <tr><td class="mono">DRAFT → DRAFT</td><td>Owner</td><td><code>version</code> matches</td><td>history UPDATED with field diff, new validation snapshot</td></tr>
       <tr><td class="mono">DRAFT → PENDING_APPROVAL</td><td>Owner</td><td>No ERROR issues</td><td><code>submitted_at</code>, history, audit</td></tr>
-      <tr><td class="mono">PENDING → APPROVED</td><td>Supervisor</td><td>Not the requester; re-validation passes; version matches</td><td><code>approval_decision</code> row, then execution</td></tr>
-      <tr><td class="mono">PENDING → APPROVED (edited)</td><td>Supervisor</td><td>As above, plus at least one change and a reason</td><td>Decision type EDITED_APPROVED with diff and Envers revision</td></tr>
-      <tr><td class="mono">PENDING → REJECTED</td><td>Supervisor</td><td>Not the requester; reason ≥ 10 chars</td><td>Decision row, history, audit</td></tr>
+      <tr><td class="mono">PENDING → APPROVED</td><td>Supervisor</td><td>Not the requester; re-validation passes; version matches</td><td>Decision columns on the request, then execution</td></tr>
+      <tr><td class="mono">PENDING → APPROVED (edited)</td><td>Supervisor</td><td>As above, plus at least one change and a reason</td><td>Decision EDITED_APPROVED with the field diff, on the request and in history</td></tr>
+      <tr><td class="mono">PENDING → REJECTED</td><td>Supervisor</td><td>Not the requester; reason ≥ 10 chars</td><td>Decision columns, history, audit</td></tr>
       <tr><td class="mono">APPROVED → EXECUTED</td><td>System, as the approving supervisor</td><td>Row lock; unique <code>execution_record.request_id</code></td><td>Simulated result JSON, history EXECUTED</td></tr>
     </tbody>
   </table></div>
@@ -418,15 +419,12 @@ stateDiagram-v2
   <div class="diagram"><pre class="mermaid">
 erDiagram
   APP_USER ||--o{ SERVICE_REQUEST : requests
-  APP_USER ||--o{ APPROVAL_DECISION : decides
+  APP_USER ||--o{ SERVICE_REQUEST : decides
   APP_USER ||--o{ DOCUMENT : uploads
   DOCUMENT ||--o{ DOCUMENT_CHUNK : has
   DOCUMENT ||--o{ INGESTION_STAGE_LOG : logs
   SERVICE_REQUEST ||--o{ REQUEST_HISTORY : records
-  SERVICE_REQUEST ||--o| APPROVAL_DECISION : gets
   SERVICE_REQUEST ||--o| EXECUTION_RECORD : yields
-  SERVICE_REQUEST ||--o{ SERVICE_REQUEST_AUD : versions
-  REVINFO ||--o{ SERVICE_REQUEST_AUD : groups
   COPILOT_RUN ||--o{ AGENT_STEP : contains
   COPILOT_RUN ||--o{ AI_USAGE : meters
   COPILOT_RUN |o--o{ SERVICE_REQUEST : sources
@@ -459,17 +457,14 @@ erDiagram
     varchar reference UK
     varchar status
     jsonb payload
-    bigint version
-  }
-  APPROVAL_DECISION {
-    uuid id PK
-    uuid request_id FK
     varchar decision
-    jsonb changes
+    jsonb decision_changes
+    int version
   }
   EXECUTION_RECORD {
-    varchar id PK
-    uuid request_id FK
+    uuid id PK
+    varchar reference UK
+    uuid request_id UK
     jsonb result
   }
   COPILOT_RUN {
@@ -531,21 +526,21 @@ erDiagram
   </details>
 
   <details class="entity">
-    <summary><span class="mono">service_request</span><span class="desc">Aggregate root of the workflow. <code>@Audited</code> by Envers.</span></summary>
+    <summary><span class="mono">service_request</span><span class="desc">Aggregate root of the workflow, including the supervisor's decision.</span></summary>
     <div class="table-wrap"><table><thead><tr><th>Column</th><th>Type</th><th>Constraints</th></tr></thead><tbody>
       <tr><td class="mono">id</td><td class="mono">uuid</td><td>PK</td></tr>
-      <tr><td class="mono">reference</td><td class="mono">varchar(16)</td><td>unique, <code>SR-YYYY-NNNNNN</code> from sequence <code>sr_ref_seq</code></td></tr>
-      <tr><td class="mono">category</td><td class="mono">varchar(32)</td><td>CARD_SERVICE | DIGITAL_BANKING | ACCOUNT_SERVICE | ADDITIONAL_DOCUMENTATION</td></tr>
+      <tr><td class="mono">reference</td><td class="mono">varchar(20)</td><td>unique <code>@NaturalId</code>, <code>SR-YYYY-NNNNNN</code> from sequence <code>service_request_number</code></td></tr>
+      <tr><td class="mono">category</td><td class="mono">varchar(30)</td><td>CARD_SERVICE | DIGITAL_BANKING | ACCOUNT_SERVICE | ADDITIONAL_DOCUMENTATION</td></tr>
       <tr><td class="mono">status</td><td class="mono">varchar(20)</td><td>lifecycle enum; index (status, submitted_at)</td></tr>
       <tr><td class="mono">title · description</td><td class="mono">varchar(120) · varchar(1000)</td><td>not null</td></tr>
-      <tr><td class="mono">payload</td><td class="mono">jsonb</td><td>sealed <code>RequestPayload</code> record mapped with <code>@JdbcTypeCode(SqlTypes.JSON)</code></td></tr>
+      <tr><td class="mono">payload</td><td class="mono">jsonb</td><td>sealed <code>RequestPayload</code> record mapped with <code>@JdbcTypeCode(SqlTypes.JSON)</code>; the <code>category</code> key picks the record type</td></tr>
       <tr><td class="mono">validation</td><td class="mono">jsonb</td><td>last <code>ValidationResult</code></td></tr>
-      <tr><td class="mono">requester_id</td><td class="mono">uuid</td><td>FK app_user; index</td></tr>
-      <tr><td class="mono">source_run_id</td><td class="mono">varchar(40)</td><td>set when an agent prepared the draft</td></tr>
-      <tr><td class="mono">version</td><td class="mono">bigint</td><td><code>@Version</code> optimistic lock</td></tr>
-      <tr><td class="mono">created_at · updated_at · submitted_at · decided_at · executed_at</td><td class="mono">timestamptz</td><td>lifecycle timestamps</td></tr>
+      <tr><td class="mono">requester_id</td><td class="mono">uuid</td><td>FK app_user; index (requester_id, updated_at desc)</td></tr>
+      <tr><td class="mono">source_run_id</td><td class="mono">varchar(64)</td><td>set when an agent prepared the draft</td></tr>
+      <tr><td class="mono">decision · decided_by · decision_reason · decision_changes · decided_at</td><td class="mono">varchar · uuid · varchar(1000) · jsonb · timestamptz</td><td>APPROVED | REJECTED | EDITED_APPROVED; check <code>decided_by &lt;&gt; requester_id</code> backs up the no-self-approval rule</td></tr>
+      <tr><td class="mono">version</td><td class="mono">int</td><td><code>@Version</code> optimistic lock; clients send it back on every change</td></tr>
+      <tr><td class="mono">created_at · updated_at · submitted_at · executed_at</td><td class="mono">timestamptz</td><td>lifecycle timestamps</td></tr>
     </tbody></table></div>
-    <p class="notes">Envers writes <code>service_request_aud</code> (the same columns plus <code>rev</code> and <code>revtype</code>). The custom <code>revinfo</code> row stores <code>actor_id</code> and <code>run_id</code>, filled by <code>ActorRevisionListener</code> from the security context and the MDC.</p>
   </details>
 
   <details class="entity">
@@ -561,13 +556,9 @@ erDiagram
   </details>
 
   <details class="entity">
-    <summary><span class="mono">approval_decision</span> · <span class="mono">execution_record</span><span class="desc">At most one of each per request, enforced by unique keys.</span></summary>
+    <summary><span class="mono">execution_record</span><span class="desc">At most one per request, enforced by a unique key.</span></summary>
     <div class="table-wrap"><table><thead><tr><th>Table.column</th><th>Type</th><th>Constraints</th></tr></thead><tbody>
-      <tr><td class="mono">approval_decision.request_id</td><td class="mono">uuid</td><td><b>unique</b>, FK</td></tr>
-      <tr><td class="mono">approval_decision.supervisor_id</td><td class="mono">uuid</td><td>FK; must differ from the requester (service check + trigger)</td></tr>
-      <tr><td class="mono">approval_decision.decision</td><td class="mono">varchar(16)</td><td>APPROVED | REJECTED | EDITED_APPROVED</td></tr>
-      <tr><td class="mono">approval_decision.reason · changes · decided_at</td><td class="mono">varchar(1000) · jsonb · timestamptz</td><td>reason required for REJECTED and EDITED_APPROVED</td></tr>
-      <tr><td class="mono">execution_record.id</td><td class="mono">varchar(12)</td><td>PK, <code>EX-XXXXXX</code></td></tr>
+      <tr><td class="mono">execution_record.id · reference</td><td class="mono">uuid · varchar(20)</td><td>PK · unique <code>EX-XXXXXXXX</code> shown in the UI</td></tr>
       <tr><td class="mono">execution_record.request_id</td><td class="mono">uuid</td><td><b>unique</b>, FK: the final guard against duplicate execution</td></tr>
       <tr><td class="mono">execution_record.outcome · simulated_action · result</td><td class="mono">varchar(10) · varchar(200) · jsonb</td><td>SUCCEEDED | FAILED</td></tr>
       <tr><td class="mono">execution_record.executed_by · executed_at</td><td class="mono">uuid · timestamptz</td><td></td></tr>
@@ -586,14 +577,15 @@ erDiagram
   </details>
 
   <h3>Category payloads (JSONB, typed in Java)</h3>
-  <pre class="code"><code><span class="k">public sealed interface</span> RequestPayload <span class="k">permits</span> CardServicePayload, DigitalBankingPayload, AccountServicePayload, AdditionalDocumentationPayload {}
-
-<span class="k">public record</span> CardServicePayload(
-    @Pattern(regexp = "CUS-\\d{6}") String customerReference,
-    @Pattern(regexp = "\\d{4}") String cardLast4,
-    @NotNull CardIssueType issueType,
-    @Pattern(regexp = "[A-Z]{3}-\\d{3}") String deliveryBranch,
-    @Size(max = 500) String notes) <span class="k">implements</span> RequestPayload {}</code></pre>
+  <pre class="code"><code>@JsonTypeInfo(use = NAME, property = "category")
+<span class="k">public sealed interface</span> RequestPayload {
+    <span class="k">record</span> CardService(String customerReference, String cardLast4, CardIssue issueType,
+                       String deliveryBranch, String notes) <span class="k">implements</span> RequestPayload {}
+    <span class="k">record</span> DigitalBanking(…) <span class="k">implements</span> RequestPayload {}
+    <span class="k">record</span> AccountService(…) <span class="k">implements</span> RequestPayload {}
+    <span class="k">record</span> AdditionalDocumentation(…) <span class="k">implements</span> RequestPayload {}
+}</code></pre>
+  <p class="prose">Drafts may be incomplete, so the records only carry size limits. The business rules live in <code>CategoryValidator</code>, which switches over the sealed type (the compiler checks every category is handled) and reads its limits from <code>copilot.requests.*</code>. Results are stored as ERROR or WARNING issues: errors block submit and approval, warnings are shown to the supervisor.</p>
   <div class="table-wrap"><table>
     <thead><tr><th>Category</th><th>Fields</th><th>Business rules (CategoryValidator)</th></tr></thead>
     <tbody>
@@ -802,7 +794,7 @@ USER
 <section id="observability">
   <h2>Observability</h2>
   <div class="grid-2">
-    <div class="panel"><h4>Correlation</h4><p><code>CorrelationIdFilter</code> takes <code>X-Request-Id</code> (or generates a UUID), stores it in the MDC as <code>runId</code> and echoes it back. <code>MdcTaskDecorator</code> copies it into agent executor threads. Envers revisions, history rows, audit events and AI usage all carry it.</p></div>
+    <div class="panel"><h4>Correlation</h4><p><code>CorrelationIdFilter</code> takes <code>X-Request-Id</code> (or generates a UUID), stores it in the MDC as <code>runId</code> and echoes it back. <code>MdcTaskDecorator</code> copies it into agent executor threads. History rows, audit events and AI usage all carry it.</p></div>
     <div class="panel"><h4>Logs</h4><p>ECS JSON on stdout (<code>logging.structured.format.console=ecs</code>), with <code>runId</code>, user, module, agent and duration. Payloads, prompts and answers are never logged; they live in the database tables.</p></div>
     <div class="panel"><h4>AI usage and cost</h4><p><code>UsageRecordingAdvisor</code> (a Spring AI <code>CallAdvisor</code>) reads <code>ChatResponse.metadata.usage</code> and writes <code>ai_usage</code>. Cost = prompt × input price + completion × output price, from <code>copilot.llm.pricing.&lt;model&gt;</code>.</p></div>
     <div class="panel"><h4>Health</h4><p><code>/actuator/health/liveness</code> and <code>/readiness</code>. Readiness includes the DB, the pgvector extension, <code>CorpusIndexedHealthIndicator</code> (DOWN until the first sync) and the configured LLM provider.</p></div>
@@ -849,7 +841,7 @@ group by 1, 2, 3 order by 1 desc;</code></pre>
   <div class="table-wrap"><table><thead><tr><th>Phase</th><th>Class under test</th><th>Cases</th></tr></thead><tbody>
     <tr><td>2</td><td><code>TextCleaner</code>, <code>Chunker</code>, <code>InjectionDetector</code>, <code>UploadValidator</code>, <code>IngestionPipeline</code></td><td>Size and overlap, no page crossing, flagged phrases, extension/content mismatch, duplicate / new version / retire</td></tr>
     <tr><td>3</td><td><code>RankFusion</code>, <code>CitationGuard</code>, <code>GroundedAnswerService</code></td><td>RRF ordering and ties, hallucinated citation → refusal, empty evidence → refusal</td></tr>
-    <tr><td>4</td><td><code>RequestStateMachine</code>, validators, <code>RequestAccessPolicy</code>, <code>ServiceRequestService</code>, <code>ApprovalService</code>, <code>SimulatedExecutionService</code></td><td>Every valid and invalid transition, 404/403 rules, self-approval, reject without a reason, edit diff, second execution returns the same record</td></tr>
+    <tr><td>4</td><td><code>RequestStatus</code>, <code>CategoryValidator</code>, <code>RequestDiff</code>, <code>RequestAccessPolicy</code>, <code>ServiceRequestService</code>, <code>ApprovalService</code>, <code>SimulatedExecutionService</code></td><td>Every valid and invalid transition, 404/403 rules, self-approval, reject without a reason, edit diff, second execution returns the same record</td></tr>
     <tr><td>5</td><td><code>CopilotOrchestrator</code>, agents, <code>UsageCostCalculator</code></td><td>Happy path, insufficient evidence, timeout → fallback, iteration cap, cost arithmetic</td></tr>
   </tbody></table></div>
   <h3>Evaluation suite (24 cases, <code>eval/cases.yaml</code>)</h3>
@@ -876,7 +868,7 @@ group by 1, 2, 3 order by 1 desc;</code></pre>
   <div class="adr"><div class="id">ADR-09</div><div><h4>Execute right after approval, idempotently</h4><p><span class="label">Chosen</span>Synchronous simulated execution after the decision commits, guarded by a row lock, a status check, a unique key and <code>@Version</code>.</p><p><span class="label">Over</span>An async job queue.</p><p><span class="label">Because</span>The action is simulated and fast. Four independent guards make duplicate execution impossible, and a retry endpoint shows idempotency.</p></div></div>
   <div class="adr"><div class="id">ADR-10</div><div><h4>Segregation of duties</h4><p><span class="label">Chosen</span>A supervisor cannot decide on a request they submitted.</p><p><span class="label">Over</span>Allowing it, since the brief doesn't forbid it.</p><p><span class="label">Because</span>It is standard banking control and closes the obvious bypass.</p></div></div>
   <div class="adr"><div class="id">ADR-11</div><div><h4>Typed JSONB payloads</h4><p><span class="label">Chosen</span>A sealed <code>RequestPayload</code> hierarchy stored as JSONB.</p><p><span class="label">Over</span>A table per category, or an EAV design.</p><p><span class="label">Because</span>Categories differ in shape. Records plus Bean Validation keep it typed in Java, and adding a category needs no migration.</p></div></div>
-  <div class="adr"><div class="id">ADR-12</div><div><h4>Envers and a history table</h4><p><span class="label">Chosen</span>Envers for full field-level revisions, plus <code>request_history</code> for the readable timeline.</p><p><span class="label">Over</span>Either one alone.</p><p><span class="label">Because</span>Envers is the tamper-evident record; history carries reasons and actions in the shape the UI needs.</p></div></div>
+  <div class="adr"><div class="id">ADR-12</div><div><h4>A history table instead of Envers</h4><p><span class="label">Chosen</span><code>request_history</code> rows with action, actor, status change, field diff, reason and run ID, plus an <code>audit_event</code> per change.</p><p><span class="label">Over</span>Hibernate Envers revisions, alone or alongside the history table.</p><p><span class="label">Because</span>Every change already goes through the service layer, which records the diff in the shape the UI shows. Envers would store the same facts a second time in <code>_aud</code> tables and add a revision listener, for no extra capability here.</p></div></div>
   <div class="adr"><div class="id">ADR-13</div><div><h4>Frontend first, contract-driven</h4><p><span class="label">Chosen</span>The full React app on MSW before any backend work.</p><p><span class="label">Over</span>Building the backend first.</p><p><span class="label">Because</span>The user wanted to see the product first, and it fixes the API contract early.</p></div></div>
   <div class="adr"><div class="id">ADR-14</div><div><h4>Business-logic unit tests only</h4><p><span class="label">Chosen</span>JUnit 5 + Mockito on services, policies, the state machine and ranking.</p><p><span class="label">Over</span>Testcontainers, MockMvc and frontend tests.</p><p><span class="label">Because</span>User decision. Security rules live in plain policy classes so unit tests still cover them, and the evaluation suite exercises the live stack.</p></div></div>
 </section>

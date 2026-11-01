@@ -40,6 +40,6 @@ class PreCheckTest {
 
     static CopilotProperties properties(double minSimilarity) {
         return new CopilotProperties(null, null, null, null, null,
-                new CopilotProperties.Retrieval(20, 5, 60, minSimilarity), new CopilotProperties.Llm(0.15, 0.6));
+                new CopilotProperties.Retrieval(20, 5, 60, minSimilarity), new CopilotProperties.Llm(0.15, 0.6), null);
     }
 }

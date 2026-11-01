@@ -79,3 +79,6 @@ copilot:
   llm:
     input-usd-per-million-tokens: ${LLM_INPUT_USD_PER_MILLION:0}
     output-usd-per-million-tokens: ${LLM_OUTPUT_USD_PER_MILLION:0}
+  requests:
+    statement-max-months: 12
+    documents-due-max-days: 14
