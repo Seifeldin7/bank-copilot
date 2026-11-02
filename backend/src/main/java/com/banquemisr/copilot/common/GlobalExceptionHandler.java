@@ -4,6 +4,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -48,6 +49,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
     ProblemDetail handleOptimisticLock(ObjectOptimisticLockingFailureException ex, HttpServletRequest request) {
         return Problems.of(HttpStatus.CONFLICT, "This request was changed by someone else. Reload it and try again.",
+                request.getRequestURI(), List.of());
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    ProblemDetail handleConstraint(DataIntegrityViolationException ex, HttpServletRequest request) {
+        log.warn("Constraint violation on {}", request.getRequestURI(), ex);
+        return Problems.of(HttpStatus.CONFLICT, "The change conflicts with existing data. Reload and try again.",
                 request.getRequestURI(), List.of());
     }
 

@@ -79,6 +79,15 @@ copilot:
   llm:
     input-usd-per-million-tokens: ${LLM_INPUT_USD_PER_MILLION:0}
     output-usd-per-million-tokens: ${LLM_OUTPUT_USD_PER_MILLION:0}
+    log-prompts: ${LLM_LOG_PROMPTS:false}
+  agents:
+    retrieval-max-iterations: 2
+    min-passages: 2
+    retrieval-timeout: 8s
+    validation-timeout: 20s
+    answer-timeout: 30s
+    preparation-timeout: 20s
+    failure-drill-phrase: ${COPILOT_FAILURE_DRILL_PHRASE:}
   requests:
     statement-max-months: 12
     documents-due-max-days: 14

@@ -3,7 +3,6 @@ package com.banquemisr.copilot.assistant;
 import com.banquemisr.copilot.assistant.CopilotDtos.Citation;
 import com.banquemisr.copilot.assistant.ModelGateway.ModelReply;
 import com.banquemisr.copilot.retrieval.Evidence;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
@@ -13,7 +12,10 @@ import tools.jackson.databind.json.JsonMapper;
 @Service
 public class GroundedAnswerService {
 
-    static final String SYSTEM_PROMPT = """
+    public static final String TASK = "Task: GROUNDED_ANSWER";
+
+    static final String SYSTEM_PROMPT = TASK + """
+
             You are the internal operations copilot for branch employees of a bank.
             Answer the question using only the evidence passages in the user message.
 
@@ -45,12 +47,8 @@ public class GroundedAnswerService {
     }
 
     public AnswerResult answer(String question, List<Evidence> evidence) {
-        Map<String, Evidence> byId = new LinkedHashMap<>();
-        for (int i = 0; i < evidence.size(); i++) {
-            byId.put("E" + (i + 1), evidence.get(i));
-        }
-
-        ModelReply reply = modelGateway.call(SYSTEM_PROMPT, userPrompt(question, byId));
+        Map<String, Evidence> byId = EvidencePrompt.label(evidence);
+        ModelReply reply = modelGateway.call(SYSTEM_PROMPT, EvidencePrompt.format(question, byId));
         CitationGuard.Checked checked = CitationGuard.check(parse(reply.text()), byId.keySet());
         if (checked.refused()) {
             return new AnswerResult(null, List.of(), checked.refusalReason(), reply);
@@ -62,25 +60,10 @@ public class GroundedAnswerService {
         return new AnswerResult(checked.answer(), citations, null, reply);
     }
 
-    static String userPrompt(String question, Map<String, Evidence> byId) {
-        StringBuilder prompt = new StringBuilder()
-                .append("<question>").append(stripTags(question)).append("</question>\n\n");
-        byId.forEach((id, item) -> prompt
-                .append("<evidence id=\"").append(id).append("\" source=\"").append(source(item)).append("\">\n")
-                .append(stripTags(item.content()))
-                .append("\n</evidence>\n\n"));
-        return prompt.toString();
-    }
-
     private AnswerDraft parse(String text) {
-        int start = text.indexOf('{');
-        int end = text.lastIndexOf('}');
-        if (start < 0 || end <= start) {
-            return AnswerDraft.refusal(CitationGuard.NOT_LINKED);
-        }
         try {
-            return jsonMapper.readValue(text.substring(start, end + 1), AnswerDraft.class);
-        } catch (JacksonException ex) {
+            return jsonMapper.readValue(JsonReplies.extractObject(text), AnswerDraft.class);
+        } catch (JacksonException | IllegalArgumentException ex) {
             return AnswerDraft.refusal(CitationGuard.NOT_LINKED);
         }
     }
@@ -88,14 +71,5 @@ public class GroundedAnswerService {
     private static Citation citation(int index, Evidence item) {
         return new Citation(index, item.chunkId(), item.documentId(), item.documentTitle(), item.version(),
                 item.page(), item.section(), item.content(), Math.round(item.similarity() * 100) / 100.0);
-    }
-
-    private static String source(Evidence item) {
-        String location = item.page() != null ? ", page " + item.page() : item.section() != null ? ", " + item.section() : "";
-        return (item.documentTitle() + " v" + item.version() + location).replaceAll("[\"<>]", "");
-    }
-
-    private static String stripTags(String text) {
-        return text.replaceAll("(?i)</?(evidence|question)[^>]*>", "");
     }
 }

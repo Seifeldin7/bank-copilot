@@ -1,17 +1,15 @@
 package com.banquemisr.copilot.assistant;
 
+import static com.banquemisr.copilot.assistant.AssistantFixtures.evidence;
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.banquemisr.copilot.common.CopilotProperties;
 import com.banquemisr.copilot.knowledge.ingestion.InjectionDetector;
-import com.banquemisr.copilot.retrieval.Evidence;
 import java.util.List;
-import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class PreCheckTest {
 
-    private final PreCheck preCheck = new PreCheck(new InjectionDetector(), properties(0.35));
+    private final PreCheck preCheck = new PreCheck(new InjectionDetector(), AssistantFixtures.properties());
 
     @Test
     void refusesPromptInjectionBeforeSearching() {
@@ -31,15 +29,5 @@ class PreCheckTest {
         assertThat(preCheck.afterSearch(List.of())).contains(PreCheck.NO_EVIDENCE);
         assertThat(preCheck.afterSearch(List.of(evidence(0.2), evidence(0.34)))).contains(PreCheck.NO_EVIDENCE);
         assertThat(preCheck.afterSearch(List.of(evidence(0.2), evidence(0.61)))).isEmpty();
-    }
-
-    static Evidence evidence(double similarity) {
-        return new Evidence(UUID.randomUUID(), UUID.randomUUID(), "Debit Card Replacement Procedure", 1, 3, null,
-                "A replacement card costs EGP 50 and is ready in 5 working days.", similarity, 1, 1, 0.03);
-    }
-
-    static CopilotProperties properties(double minSimilarity) {
-        return new CopilotProperties(null, null, null, null, null,
-                new CopilotProperties.Retrieval(20, 5, 60, minSimilarity), new CopilotProperties.Llm(0.15, 0.6), null);
     }
 }

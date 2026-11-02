@@ -54,6 +54,7 @@ public class HybridSearch {
                 chunk.getId(),
                 chunk.getDocument().getId(),
                 chunk.getDocument().getTitle(),
+                chunk.getDocument().getCategory(),
                 chunk.getDocument().getVersion(),
                 chunk.getPageNumber(),
                 chunk.getSection(),

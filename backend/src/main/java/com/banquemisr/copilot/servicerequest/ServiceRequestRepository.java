@@ -10,6 +10,10 @@ import org.springframework.data.jpa.repository.Query;
 
 public interface ServiceRequestRepository extends JpaRepository<ServiceRequest, UUID> {
 
+    boolean existsBySourceRunId(String sourceRunId);
+
+    Optional<ServiceRequest> findBySourceRunId(String sourceRunId);
+
     @Query(nativeQuery = true, value = "select nextval('service_request_number')")
     long nextNumber();
 

@@ -172,7 +172,7 @@ html { scroll-behavior: smooth; }
     <div class="phase done"><div class="n">Phase 2</div><div class="t">Foundation, identity, corpus, ingestion</div><span class="pill built">Built</span></div>
     <div class="phase done"><div class="n">Phase 3</div><div class="t">Hybrid retrieval, grounded answers</div><span class="pill built">Built</span></div>
     <div class="phase done"><div class="n">Phase 4</div><div class="t">Requests, approvals, execution, audit</div><span class="pill built">Built</span></div>
-    <div class="phase"><div class="n">Phase 5</div><div class="t">Agents, observability, eval, Docker</div><span class="pill planned">Planned</span></div>
+    <div class="phase done"><div class="n">Phase 5</div><div class="t">Agents, observability, eval, Docker</div><span class="pill built">Built</span></div>
   </div>
 </header>
 
@@ -192,7 +192,7 @@ html { scroll-behavior: smooth; }
       <tr><td>Persistence</td><td>Spring Data JPA, Hibernate 7.4, <code>hibernate-vector</code>, Flyway</td><td>Flyway owns the schema; Hibernate runs in <code>ddl-auto=validate</code></td></tr>
       <tr><td>Database</td><td>PostgreSQL 16 + pgvector</td><td>Relational data, the vector index (HNSW) and the keyword index (GIN on tsvector) in one store</td></tr>
       <tr><td>Security</td><td>Spring Security, OAuth2 resource server, JWT HS256, BCrypt</td><td>Stateless bearer tokens with a 60-minute TTL</td></tr>
-      <tr><td>AI</td><td>Spring AI 2.0</td><td>Embeddings: local ONNX all-MiniLM-L6-v2 (384 dims). Chat model: <code>stub</code> (default) | <code>openai</code> | <code>anthropic</code> | <code>ollama</code></td></tr>
+      <tr><td>AI</td><td>Spring AI 2.0</td><td>Embeddings: local ONNX all-MiniLM-L6-v2 (384 dims). Chat model: <code>stub</code> (default) | <code>openai</code> (or any OpenAI-compatible server) | <code>anthropic</code></td></tr>
       <tr><td>Ops</td><td>Actuator, ECS structured logs, springdoc OpenAPI, Docker Compose</td><td>Liveness/readiness probes and a correlation ID on every request</td></tr>
       <tr><td>Frontend</td><td>React 19, Vite 8, TypeScript 7, React Router 7, TanStack Query 5, React Hook Form + Zod 4, Tailwind 4, MSW 2</td><td>Built first against a mock API that follows the same contract</td></tr>
       <tr><td>Tests</td><td>JUnit 5, Mockito</td><td>Unit tests of business logic only, by user decision</td></tr>
@@ -212,7 +212,6 @@ flowchart LR
     NGX["frontend<br/>nginx :80 → host :3000"]
     API["backend<br/>Spring Boot :8080"]
     PG[("postgres<br/>pgvector/pgvector:pg16")]
-    OLL["ollama<br/>(optional profile)"]
     VOL1[["volume: model-cache<br/>ONNX MiniLM"]]
     VOL2[["volume: uploads"]]
     VOL3[["bind: ./corpus (read-only)"]]
@@ -221,7 +220,6 @@ flowchart LR
   UI -->|"HTTPS · Bearer JWT · X-Request-Id"| NGX
   NGX -->|"/api/* proxy"| API
   API -->|"JDBC · Hibernate"| PG
-  API -.->|"chat, if provider=ollama"| OLL
   API -.->|"chat, if provider=openai/anthropic"| LLM
   API --- VOL1
   API --- VOL2
@@ -273,11 +271,11 @@ flowchart LR
       <tr><td class="mono">identity</td><td class="mono">app_user</td><td><code>AuthController</code>, <code>JwtTokenService</code>, <code>UserProvisioningService</code>, <code>SecurityConfig</code></td><td><code>CurrentUser</code>, <code>UserDirectory</code></td></tr>
       <tr><td class="mono">knowledge</td><td class="mono">document, document_chunk, ingestion_stage_log</td><td><code>IngestionPipeline</code>, <code>PdfExtractor</code>, <code>MarkdownExtractor</code>, <code>TextCleaner</code>, <code>Chunker</code>, <code>InjectionDetector</code>, <code>EmbeddingStage</code>, <code>IndexWriter</code>, <code>CorpusBootstrapper</code>, <code>UploadValidator</code></td><td><code>DocumentCatalog</code></td></tr>
       <tr><td class="mono">retrieval</td><td>none (reads chunks)</td><td><code>HybridSearch</code>, <code>RankFusion</code>, <code>QueryTerms</code>, <code>SearchController</code></td><td><code>HybridSearch.search(question)</code></td></tr>
-      <tr><td class="mono">assistant</td><td class="mono">copilot_run, agent_step</td><td><code>CopilotService</code>, <code>PreCheck</code>, <code>GroundedAnswerService</code>, <code>CitationGuard</code>, <code>ModelGateway</code>, <code>StubChatModel</code>; Phase 5 adds <code>CopilotOrchestrator</code>, three agents and the fallback</td><td><code>CopilotService.ask()</code></td></tr>
+      <tr><td class="mono">assistant</td><td class="mono">copilot_run, agent_step, ai_usage</td><td><code>CopilotOrchestrator</code>, <code>KnowledgeRetrievalAgent</code>, <code>PolicyValidationAgent</code>, <code>RequestPreparationAgent</code>, <code>StepRunner</code>, <code>FallbackAnswerService</code>, <code>GroundedAnswerService</code>, <code>CitationGuard</code>, <code>ModelGateway</code>, <code>StubChatModel</code>, <code>RunRecorder</code>, <code>RunQueryService</code></td><td><code>CopilotOrchestrator.ask()</code>, <code>DraftPreparationService.prepare()</code></td></tr>
       <tr><td class="mono">servicerequest</td><td class="mono">service_request, request_history, execution_record</td><td><code>ServiceRequestService</code>, <code>RequestStatus</code> (transition table), <code>CategoryValidator</code>, <code>RequestAccessPolicy</code>, <code>RequestDiff</code>, <code>RequestHistoryRecorder</code></td><td><code>ServiceRequestService.create()</code></td></tr>
       <tr><td class="mono">approval</td><td>none (decides on service_request)</td><td><code>ApprovalService</code>, <code>SimulatedExecutionService</code>, <code>SimulatedActions</code></td><td>none</td></tr>
-      <tr><td class="mono">audit</td><td class="mono">audit_event, ai_usage</td><td><code>CorrelationIdFilter</code>, <code>AuditService</code>, <code>UsageRecordingAdvisor</code>, <code>UsageCostCalculator</code></td><td><code>AuditService</code>, <code>RunContext</code></td></tr>
-      <tr><td class="mono">common</td><td>none</td><td><code>ProblemDetailsAdvice</code>, <code>MdcTaskDecorator</code>, <code>Clock</code> bean</td><td>shared exceptions</td></tr>
+      <tr><td class="mono">audit</td><td class="mono">audit_event</td><td><code>CorrelationIdFilter</code>, <code>AuditService</code>, <code>AuditEventController</code></td><td><code>AuditService</code>, <code>RunContext</code></td></tr>
+      <tr><td class="mono">common</td><td>none</td><td><code>GlobalExceptionHandler</code>, <code>CopilotProperties</code>, <code>Clock</code> bean</td><td>shared exceptions</td></tr>
     </tbody>
   </table></div>
 </section>
@@ -294,7 +292,7 @@ sequenceDiagram
   participant C as CopilotController
   participant O as CopilotOrchestrator
   participant KR as KnowledgeRetrievalAgent
-  participant H as HybridRetriever
+  participant H as HybridSearch
   participant PV as PolicyValidationAgent
   participant G as GroundedAnswerService
   participant CG as CitationGuard
@@ -303,25 +301,24 @@ sequenceDiagram
   E->>F: POST /api/copilot/ask {question}
   F->>F: runId = X-Request-Id or UUID → MDC
   F->>C: authenticated request
-  C->>O: ask(question, user)
-  O->>KR: RetrievalQuery (timeout 8s)
+  C->>O: ask(user, question)
+  O->>O: screen question (injection, too vague) → refuse early
+  O->>KR: RetrievalRequest (timeout 8s)
   loop up to 2 iterations
     KR->>H: search(query, k=5)
     H-->>KR: Evidence[] (semantic ∪ keyword, RRF)
-    opt fewer than 2 passages above threshold
-      KR->>M: reformulate query
-    end
+    Note over KR: stop at 2 passages above 0.35; otherwise retry once with keywords only
   end
   KR-->>O: RetrievalResult
-  O->>PV: evidence + question (timeout 10s)
-  PV->>M: structured verdict
+  O->>PV: evidence + question (timeout 20s)
+  PV->>M: structured verdict (skipped if nothing reaches 0.35)
   PV-->>O: ValidationVerdict
   alt insufficient
     O-->>C: refusal + verdict
   else sufficient
-    O->>G: question + evidence (timeout 20s)
+    O->>G: question + evidence (timeout 30s)
     G->>M: system rules + &lt;evidence id=…&gt; blocks
-    M-->>G: AnswerDraft {answer, citedChunkIds}
+    M-->>G: AnswerDraft {answer, citedEvidence}
     G->>CG: verify citations ⊆ evidence
     CG-->>O: answer or forced refusal
   end
@@ -568,9 +565,9 @@ erDiagram
   <details class="entity">
     <summary><span class="mono">copilot_run</span> · <span class="mono">agent_step</span> · <span class="mono">ai_usage</span> · <span class="mono">audit_event</span> · <span class="mono">ingestion_stage_log</span><span class="desc">Observability tables you can query with SQL.</span></summary>
     <div class="table-wrap"><table><thead><tr><th>Table</th><th>Columns</th><th>Indexes</th></tr></thead><tbody>
-      <tr><td class="mono">copilot_run</td><td>run_id PK, user_id, question, mode, refused, refusal_reason, answer, citations jsonb, verdict jsonb, suggested_category, latency_ms, created_at</td><td>(created_at desc), (user_id)</td></tr>
+      <tr><td class="mono">copilot_run</td><td>run_id PK, user_id, question, mode, refused, refusal_reason, answer, citations jsonb, verdict jsonb, suggested_category, prompt_tokens, completion_tokens, cost_usd, latency_ms, created_at</td><td>(created_at desc), (user_id)</td></tr>
       <tr><td class="mono">agent_step</td><td>id, run_id FK, step_no, agent, status, summary, iterations, input jsonb, output jsonb, duration_ms, error, started_at</td><td>(run_id, step_no) unique</td></tr>
-      <tr><td class="mono">ai_usage</td><td>id bigserial, run_id, step_no, agent, provider, model, prompt_tokens, completion_tokens, est_cost_usd numeric(12,6), latency_ms, at</td><td>(at), (run_id), (provider, model)</td></tr>
+      <tr><td class="mono">ai_usage</td><td>id bigserial, run_id, step_no, agent, provider, model, prompt_tokens, completion_tokens, cost_usd, latency_ms, prompt and response (only when <code>LLM_LOG_PROMPTS=true</code>), at</td><td>(at), (run_id), (provider, model)</td></tr>
       <tr><td class="mono">audit_event</td><td>id, action, actor_id, resource_type, resource_id, detail, run_id, at</td><td>(run_id), (at desc), (resource_type, resource_id)</td></tr>
       <tr><td class="mono">ingestion_stage_log</td><td>id bigserial, document_id, stage, status, duration_ms, detail, run_id, at</td><td>(document_id, at)</td></tr>
     </tbody></table></div>
@@ -752,13 +749,13 @@ limit 20</code></pre>
   </tbody></table></div>
 
   <h3>Agents</h3>
-  <p class="prose">Agents implement <code>Agent&lt;I extends AgentInput, O extends AgentOutput&gt;</code> and exchange only Java records. The orchestrator gives each agent a tool registry restricted to what that agent needs.</p>
+  <p class="prose">Agents implement <code>Agent&lt;I, O&gt;</code> and exchange only Java records (<code>AgentMessages</code>). Each agent is constructed with only the beans it may use, which is how its tools are restricted. The orchestrator runs every step through <code>StepRunner</code>, which applies the timeout on a virtual thread and copies the MDC so the run ID follows the step.</p>
   <div class="table-wrap"><table><thead><tr><th>Agent</th><th>Input → Output</th><th>Allowed tools</th><th>Max iterations</th><th>Timeout</th><th>Terminates when</th></tr></thead><tbody>
-    <tr><td>KnowledgeRetrievalAgent</td><td class="mono">RetrievalQuery → RetrievalResult</td><td><code>HybridSearchTool</code></td><td>2</td><td>8 s</td><td>≥ 2 passages above threshold, or the iteration cap</td></tr>
-    <tr><td>PolicyValidationAgent</td><td class="mono">ValidationRequest → ValidationVerdict</td><td>none</td><td>1</td><td>10 s</td><td>One verdict (LLM structured output combined with deterministic score checks)</td></tr>
-    <tr><td>Grounded answer step</td><td class="mono">AnswerRequest → AnswerDraft</td><td>none</td><td>1</td><td>20 s</td><td>One draft that passes <code>CitationGuard</code></td></tr>
-    <tr><td>RequestPreparationAgent</td><td class="mono">PreparationRequest → RequestDraft</td><td><code>CategorySchemaCatalog</code> (read-only)</td><td>1</td><td>15 s</td><td>One draft with <code>missingFields</code></td></tr>
-    <tr><td>CopilotOrchestrator</td><td class="mono">question → AskResponse</td><td>agents only</td><td>8 steps</td><td>45 s total</td><td>Answer, refusal, or fallback</td></tr>
+    <tr><td>KnowledgeRetrievalAgent</td><td class="mono">RetrievalRequest → RetrievalResult</td><td><code>HybridSearch</code></td><td>2</td><td>8 s</td><td>≥ 2 passages above similarity 0.35, or the iteration cap (the second iteration reformulates the question to keywords)</td></tr>
+    <tr><td>PolicyValidationAgent</td><td class="mono">ValidationRequest → ValidationVerdict</td><td><code>ModelGateway</code></td><td>1</td><td>20 s</td><td>One verdict. No model call when no passage reaches the threshold; an unreadable reply counts as insufficient</td></tr>
+    <tr><td>Grounded answer step</td><td class="mono">question + evidence → AnswerResult</td><td><code>ModelGateway</code></td><td>1</td><td>30 s</td><td>One draft that passes <code>CitationGuard</code></td></tr>
+    <tr><td>RequestPreparationAgent</td><td class="mono">PreparationRequest → RequestDraft</td><td><code>ModelGateway</code>, <code>CategorySchemaCatalog</code> (read-only)</td><td>1</td><td>20 s</td><td>One draft with <code>missingFields</code>; an unreadable reply gives an empty draft for the category</td></tr>
+    <tr><td>CopilotOrchestrator</td><td class="mono">question → AskResponse</td><td>agents only</td><td>fixed flow, at most 5 steps</td><td>per step</td><td>Answer, refusal, or fallback</td></tr>
   </tbody></table></div>
   <div class="callout">No agent can reach <code>submit</code>, <code>approve</code> or <code>execute</code>. These services are not registered as tools, and the preparation agent returns a DTO that the orchestrator saves as a DRAFT through the same <code>createDraft</code> an employee uses.</div>
 
@@ -794,10 +791,10 @@ USER
 <section id="observability">
   <h2>Observability</h2>
   <div class="grid-2">
-    <div class="panel"><h4>Correlation</h4><p><code>CorrelationIdFilter</code> takes <code>X-Request-Id</code> (or generates a UUID), stores it in the MDC as <code>runId</code> and echoes it back. <code>MdcTaskDecorator</code> copies it into agent executor threads. History rows, audit events and AI usage all carry it.</p></div>
-    <div class="panel"><h4>Logs</h4><p>ECS JSON on stdout (<code>logging.structured.format.console=ecs</code>), with <code>runId</code>, user, module, agent and duration. Payloads, prompts and answers are never logged; they live in the database tables.</p></div>
-    <div class="panel"><h4>AI usage and cost</h4><p><code>UsageRecordingAdvisor</code> (a Spring AI <code>CallAdvisor</code>) reads <code>ChatResponse.metadata.usage</code> and writes <code>ai_usage</code>. Cost = prompt × input price + completion × output price, from <code>copilot.llm.pricing.&lt;model&gt;</code>.</p></div>
-    <div class="panel"><h4>Health</h4><p><code>/actuator/health/liveness</code> and <code>/readiness</code>. Readiness includes the DB, the pgvector extension, <code>CorpusIndexedHealthIndicator</code> (DOWN until the first sync) and the configured LLM provider.</p></div>
+    <div class="panel"><h4>Correlation</h4><p><code>CorrelationIdFilter</code> takes <code>X-Request-Id</code> (or generates a UUID), stores it in the MDC as <code>runId</code> and echoes it back. <code>StepRunner</code> copies it into each agent step. History rows, audit events and AI usage all carry it.</p></div>
+    <div class="panel"><h4>Logs</h4><p>ECS JSON on stdout (<code>logging.structured.format.console=ecs</code>), with <code>runId</code> on every line; agent steps add agent, status and duration, and copilot runs add mode, refusal, citations, tokens and latency. Prompts and answers are never logged.</p></div>
+    <div class="panel"><h4>AI usage and cost</h4><p>Every model call goes through <code>ModelGateway</code>, which reads <code>ChatResponse.metadata.usage</code> (estimating characters / 4 when the provider reports none) and returns it with the reply. <code>RunRecorder</code> writes one <code>ai_usage</code> row per call. Cost = prompt × input price + completion × output price, from <code>LLM_INPUT_USD_PER_MILLION</code> and <code>LLM_OUTPUT_USD_PER_MILLION</code>.</p></div>
+    <div class="panel"><h4>Health</h4><p><code>/actuator/health/liveness</code> and <code>/readiness</code>. Readiness includes the DB and the <code>corpus</code> indicator, which is DOWN until the first corpus sync finishes.</p></div>
   </div>
   <pre class="code"><code><span class="c">-- cost per day and model, straight from the database</span>
 select date_trunc('day', at) as day, provider, model,
@@ -842,7 +839,7 @@ group by 1, 2, 3 order by 1 desc;</code></pre>
     <tr><td>2</td><td><code>TextCleaner</code>, <code>Chunker</code>, <code>InjectionDetector</code>, <code>UploadValidator</code>, <code>IngestionPipeline</code></td><td>Size and overlap, no page crossing, flagged phrases, extension/content mismatch, duplicate / new version / retire</td></tr>
     <tr><td>3</td><td><code>RankFusion</code>, <code>CitationGuard</code>, <code>GroundedAnswerService</code></td><td>RRF ordering and ties, hallucinated citation → refusal, empty evidence → refusal</td></tr>
     <tr><td>4</td><td><code>RequestStatus</code>, <code>CategoryValidator</code>, <code>RequestDiff</code>, <code>RequestAccessPolicy</code>, <code>ServiceRequestService</code>, <code>ApprovalService</code>, <code>SimulatedExecutionService</code></td><td>Every valid and invalid transition, 404/403 rules, self-approval, reject without a reason, edit diff, second execution returns the same record</td></tr>
-    <tr><td>5</td><td><code>CopilotOrchestrator</code>, agents, <code>UsageCostCalculator</code></td><td>Happy path, insufficient evidence, timeout → fallback, iteration cap, cost arithmetic</td></tr>
+    <tr><td>5</td><td><code>CopilotOrchestrator</code>, the three agents, <code>DraftPreparationService</code>, <code>ModelGateway</code></td><td>Happy path, screening refusal, insufficient evidence, timeout → fallback, failure drill, failed fallback, retrieval iteration cap, unreadable replies, draft access rules, token and cost arithmetic</td></tr>
   </tbody></table></div>
   <h3>Evaluation suite (24 cases, <code>eval/cases.yaml</code>)</h3>
   <div class="table-wrap"><table><thead><tr><th>Metric</th><th>Definition</th></tr></thead><tbody>

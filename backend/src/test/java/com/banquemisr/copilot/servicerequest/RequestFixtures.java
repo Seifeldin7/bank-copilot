@@ -27,7 +27,7 @@ public final class RequestFixtures {
 
     public static CategoryValidator validator() {
         CopilotProperties properties = new CopilotProperties(null, null, null, null, null, null, null,
-                new CopilotProperties.Requests(12, 14));
+                new CopilotProperties.Requests(12, 14), null);
         return new CategoryValidator(CLOCK, properties);
     }
 

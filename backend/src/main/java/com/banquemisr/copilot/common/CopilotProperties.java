@@ -13,7 +13,8 @@ public record CopilotProperties(
         Ingestion ingestion,
         Retrieval retrieval,
         Llm llm,
-        Requests requests) {
+        Requests requests,
+        Agents agents) {
 
     public record Security(String jwtSecret, Duration tokenTtl, List<String> allowedOrigins) {
     }
@@ -33,7 +34,12 @@ public record CopilotProperties(
     public record Retrieval(int candidates, int evidence, int rrfK, double minSimilarity) {
     }
 
-    public record Llm(double inputUsdPerMillionTokens, double outputUsdPerMillionTokens) {
+    public record Llm(double inputUsdPerMillionTokens, double outputUsdPerMillionTokens, boolean logPrompts) {
+    }
+
+    public record Agents(int retrievalMaxIterations, int minPassages, Duration retrievalTimeout,
+                         Duration validationTimeout, Duration answerTimeout, Duration preparationTimeout,
+                         String failureDrillPhrase) {
     }
 
     public record Requests(int statementMaxMonths, int documentsDueMaxDays) {

@@ -1,5 +1,7 @@
 package com.banquemisr.copilot.assistant;
 
+import com.banquemisr.copilot.servicerequest.RequestCategory;
+import com.banquemisr.copilot.servicerequest.RequestDtos.RequestView;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
@@ -13,7 +15,7 @@ public final class CopilotDtos {
 
     public enum Mode { ORCHESTRATED, FALLBACK }
 
-    public enum Agent { ORCHESTRATOR, KNOWLEDGE_RETRIEVAL, POLICY_VALIDATION, ANSWER_GENERATION, REQUEST_PREPARATION, FALLBACK_ANSWER }
+    public enum AgentName { ORCHESTRATOR, KNOWLEDGE_RETRIEVAL, POLICY_VALIDATION, ANSWER_GENERATION, REQUEST_PREPARATION, FALLBACK_ANSWER }
 
     public enum StepStatus { SUCCEEDED, FAILED, TIMED_OUT, SKIPPED }
 
@@ -21,6 +23,12 @@ public final class CopilotDtos {
             @NotBlank(message = "Ask a question between 3 and 1000 characters.")
             @Size(min = 3, max = 1000, message = "Ask a question between 3 and 1000 characters.")
             String question) {
+    }
+
+    public record PrepareRequest(@NotBlank(message = "The run ID is required.") @Size(max = 64) String runId) {
+    }
+
+    public record PreparedDraftResponse(RequestView request, List<String> missingFields) {
     }
 
     public record Citation(int index, UUID chunkId, UUID documentId, String documentTitle, int version,
@@ -31,7 +39,7 @@ public final class CopilotDtos {
                                     List<String> unsupportedAssumptions, double confidence) {
     }
 
-    public record AgentStep(int step, Agent agent, StepStatus status, String summary, int iterations, long durationMs,
+    public record AgentStep(int step, AgentName agent, StepStatus status, String summary, int iterations, long durationMs,
                             int promptTokens, int completionTokens, double estimatedCostUsd, Instant startedAt) {
     }
 
@@ -46,7 +54,7 @@ public final class CopilotDtos {
     }
 
     public record AskResponse(String runId, String question, String answer, boolean refused, String refusalReason,
-                              Mode mode, List<Citation> citations, ValidationVerdict verdict, String suggestedCategory,
+                              Mode mode, List<Citation> citations, ValidationVerdict verdict, RequestCategory suggestedCategory,
                               List<AgentStep> steps, UsageTotals usage, long latencyMs, Instant createdAt) {
     }
 }

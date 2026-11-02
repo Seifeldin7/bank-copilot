@@ -34,10 +34,10 @@ There is no public sign-up and no endpoint that changes a role.
 | Method | Path | Role | Notes |
 |---|---|---|---|
 | POST | `/copilot/ask` | any | `AskRequest` → `AskResponse` (answer or refusal, citations, verdict, agent steps, usage) |
-| POST | `/copilot/prepare-request` | any | `{ runId }` → `PreparedDraftResponse`. Creates a **DRAFT** owned by the caller. `409` if the run was refused or a draft already exists, `422` if no category applies |
+| POST | `/copilot/prepare-request` | any | `{ runId }` → `PreparedDraftResponse`. Creates a **DRAFT** owned by the caller. `404` for another user's run, `409` if the run was refused or a draft already exists, `422` if no category applies, `503` if the agent fails |
 | GET | `/search?q&limit` | SUPERVISOR | `Evidence[]` (at most 20): each hit's semantic rank, keyword rank, fused RRF score and cosine similarity. For inspecting retrieval |
 
-Until Phase 5, `AskResponse` has two steps (`KNOWLEDGE_RETRIEVAL`, `ANSWER_GENERATION`), `verdict` and `suggestedCategory` are `null`, and `prepare-request` is not implemented.
+`AskResponse.mode` is `ORCHESTRATED`, or `FALLBACK` when a step failed and the plain retrieval path answered. `steps` lists ORCHESTRATOR, KNOWLEDGE_RETRIEVAL, POLICY_VALIDATION and ANSWER_GENERATION (plus FALLBACK_ANSWER on fallback); steps that did not run are `SKIPPED`. `verdict` comes from the Policy Validation Agent, and `suggestedCategory` from the category of the first cited document.
 
 ## Documents
 
@@ -75,7 +75,7 @@ Lifecycle: `DRAFT → PENDING_APPROVAL → APPROVED → EXECUTED`, plus `PENDING
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/audit/runs` | `RunSummary[]` |
-| GET | `/audit/runs/{runId}` | `RunTrace`: steps, model calls, related audit events |
-| GET | `/audit/events` | `AuditEvent[]`, newest first |
-| GET | `/audit/usage?from&to` | `UsageSummary`: totals, per day, per model |
+| GET | `/audit/runs` | `RunSummary[]`, newest 200 |
+| GET | `/audit/runs/{runId}` | `RunTrace`: steps, model calls, related audit events (including the draft prepared from the run) |
+| GET | `/audit/events` | `AuditEvent[]`, newest 200 first |
+| GET | `/audit/usage?from&to` | `UsageSummary`: totals, per day (UTC), per provider and model. Defaults to the last 30 days; at most one year |

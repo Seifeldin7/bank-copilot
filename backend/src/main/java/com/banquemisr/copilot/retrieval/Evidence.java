@@ -6,6 +6,7 @@ public record Evidence(
         UUID chunkId,
         UUID documentId,
         String documentTitle,
+        String documentCategory,
         int version,
         Integer page,
         String section,
